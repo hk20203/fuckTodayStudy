@@ -3,8 +3,7 @@ import json
 import os
 import random
 import re
-
-import requests
+import uuid
 from pyDes import PAD_PKCS5, des, CBC
 from requests_toolbelt import MultipartEncoder
 
@@ -47,11 +46,16 @@ class Collection:
             raise Exception('查询表单失败，当前没有信息收集任务哦！')
         self.collectWid = res['datas']['rows'][0]['wid']
         self.formWid = res['datas']['rows'][0]['formWid']
+        self.instanceWid = res['datas']['rows'][0].get('instanceWid', '')  # [临时性修改]循环普通任务有instanceWid
         detailUrl = f'{self.host}wec-counselor-collector-apps/stu/collector/detailCollector'
         res = self.session.post(detailUrl, headers=headers, data=json.dumps({'collectorWid': self.collectWid}),
                                 verify=False)
         res = DT.resJsonEncode(res)
-        self.schoolTaskWid = res['datas']['collector']['schoolTaskWid']
+        try:
+            self.schoolTaskWid = res['datas']['collector']['schoolTaskWid']
+        except:
+            print('[临时性修改]循环普通任务没有schoolTaskWid')
+            self.schoolTaskWid = ''
         getFormUrl = f'{self.host}wec-counselor-collector-apps/stu/collector/getFormFields'
         params = {"pageSize": 100, "pageNumber": 1,
                   "formWid": self.formWid, "collectorWid": self.collectWid}
@@ -260,7 +264,7 @@ class Collection:
         forBody = {
             "formWid": self.formWid, "address": self.userInfo['address'], "collectWid": self.collectWid,
             "schoolTaskWid": self.schoolTaskWid, "form": self.form, "uaIsCpadaily": True,
-            "latitude": self.userInfo['lat'], 'longitude': self.userInfo['lon']
+            "latitude": self.userInfo['lat'], 'longitude': self.userInfo['lon'], 'instanceWid':self.instanceWid  # [临时性修改]循环普通任务有instanceWid
         }
 
         forSubmit = {
@@ -275,7 +279,8 @@ class Collection:
         }
         forBody = json.dumps(forBody, ensure_ascii=False)
         print(f'{Utils.getAsiaTime()} 正在请求加密数据...')
-        res = requests.post(self.encryptApi, params=forSubmit, data=forBody.encode("utf-8"), verify=False)
+        res = self.session.post(
+            self.encryptApi, params=forSubmit, data=forBody.encode("utf-8"), verify=False)
         if res.status_code != 200:
             raise Exception("加密表单数据出错，请反馈")
         res = res.json()
@@ -298,3 +303,4 @@ class Collection:
         k = des(key, CBC, iv, pad=None, padmode=PAD_PKCS5)
         encrypt_str = k.encrypt(content)
         return base64.b64encode(encrypt_str).decode()
+
